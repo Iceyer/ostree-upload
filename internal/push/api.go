@@ -187,32 +187,49 @@ func (c *Client) Upload(queueID string, objects common.Objects) error {
 		}()
 
 		for _, object := range objects {
-			// Upload each object independently
-			part, err := writer.CreateFormFile("file", object.ObjectName)
-			if err != nil {
-				errChan <- err
-				return
-			}
 
-			file, err := os.Open(object.ObjectPath)
-			if err != nil {
-				errChan <- err
-				return
-			}
+			if object.ObjectType == common.LinkObject {
+				fmt.Println("LLLL", object.ObjectName, object.ObjectPath, object.Checksum)
+				// Let the server verify the checksum
+				if err := writer.WriteField("link", fmt.Sprintf("%s:%s", object.ObjectName, object.ObjectPath)); err != nil {
+					errChan <- err
+					return
+				}
+				// Let the server verify the checksum
+				if err := writer.WriteField("checksum", fmt.Sprintf("%s:%s", object.ObjectName, object.Checksum)); err != nil {
+					errChan <- err
+					return
+				}
 
-			if _, err = io.Copy(part, file); err != nil {
+			}
+			if object.ObjectType == common.FileObject {
+				// Upload each object independently
+				part, err := writer.CreateFormFile("file", object.ObjectName)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				file, err := os.Open(object.ObjectPath)
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				if _, err = io.Copy(part, file); err != nil {
+					file.Close()
+					errChan <- err
+					return
+				}
+
 				file.Close()
-				errChan <- err
-				return
+				// Let the server verify the checksum
+				if err := writer.WriteField("checksum", fmt.Sprintf("%s:%s", object.ObjectName, object.Checksum)); err != nil {
+					errChan <- err
+					return
+				}
 			}
 
-			file.Close()
-
-			// Let the server verify the checksum
-			if err := writer.WriteField("checksum", fmt.Sprintf("%s:%s", object.ObjectName, object.Checksum)); err != nil {
-				errChan <- err
-				return
-			}
 		}
 	}()
 

@@ -6,7 +6,10 @@ package push
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/lirios/ostree-upload/internal/common"
 	"github.com/lirios/ostree-upload/internal/logger"
@@ -92,17 +95,42 @@ func (p *Pusher) FindObjectsForCommits(revs []string) (common.Objects, error) {
 		}
 
 		for _, objectName := range revObjects {
+			objType := -1
+			var checksum string
 			path := p.repo.GetObjectPath(objectName)
-			if _, err := os.Stat(path); err != nil {
+			lst, err := os.Lstat(path)
+			if err != nil {
 				return nil, err
 			}
+			if lst.Mode()&fs.ModeSymlink != 0 {
+				objType = common.LinkObject
 
-			checksum, err := common.CalculateChecksum(path)
+				// checksum, err = common.CalculateLinkChecksum(path)
+				fmt.Println("link", path)
+				checksum = filepath.Base(filepath.Dir(path)) + filepath.Base(path)
+
+				fmt.Println("link", path, checksum)
+				checksum = strings.ReplaceAll(checksum, ".file", "")
+
+				path, _ = os.Readlink(path)
+				fmt.Println("link", path, checksum)
+			} else {
+				objType = common.FileObject
+				checksum, err = common.CalculateChecksum(path)
+				// fmt.Println(checksum, path)
+			}
+
 			if err != nil {
 				return nil, err
 			}
 
-			object := common.Object{Rev: rev, ObjectName: objectName, ObjectPath: path, Checksum: checksum}
+			object := common.Object{
+				Rev:        rev,
+				ObjectName: objectName,
+				ObjectPath: path,
+				Checksum:   checksum,
+				ObjectType: objType,
+			}
 			objects[objectName] = object
 		}
 

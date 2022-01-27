@@ -9,7 +9,15 @@ import (
 	"os"
 )
 
+func moveLink(source, destination string) error {
+	link, _ := os.Readlink(source)
+	os.Symlink(link, destination)
+	os.Remove(source)
+	return nil
+}
+
 func moveFile(source, destination string) error {
+
 	src, err := os.Open(source)
 	if err != nil {
 		return err

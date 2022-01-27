@@ -10,10 +10,18 @@ type RevisionPair struct {
 	Client string `json:"client"`
 }
 
+const (
+	FileObject = iota
+	LinkObject
+	DirTreeObject
+	CommitObject
+)
+
 // Object represents an object that needs to be uploaded to the receiver
 type Object struct {
 	Rev        string `json:"rev"`
 	ObjectName string `json:"object_name"`
+	ObjectType int    `json:"object_type"`
 	ObjectPath string `json:"object_path"`
 	Checksum   string `json:"checksum"`
 }

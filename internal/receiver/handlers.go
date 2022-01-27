@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -89,6 +90,7 @@ func CreateEntryHandler(w http.ResponseWriter, r *http.Request) {
 
 		return nil
 	})
+
 	if err != nil {
 		logger.Errorf("Failed to walk the queue: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -256,7 +258,25 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if part.FormName() == "file" {
+		if part.FormName() == "link" {
+			value := &bytes.Buffer{}
+			if _, err = io.Copy(value, part); err != nil {
+				logger.Errorf("Failed to read checksum: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			args := strings.Split(value.String(), ":")
+			objectName := args[0]
+			link := args[1]
+			args = strings.Split(objectName, ".")
+			checksums[objectName] = args[0]
+			fmt.Println("LLLL", objectName, checksums[objectName])
+
+			objectPath := GetTempObjectPath(repo, objectName)
+			fmt.Println(os.Symlink(link, objectPath))
+			fmt.Println("LLLL", objectName, checksums[objectName], link, objectPath)
+		} else if part.FormName() == "file" {
 			// Receive file
 			objectName := part.FileName()
 			logger.Debugf("Receiving \"%s\"...", objectName)
@@ -276,6 +296,8 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer objectFile.Close()
+
+			fmt.Println("create file", objectPath, objectName)
 
 			// Write file and calculate checksum for a verification later
 			if _, err = io.Copy(objectFile, part); err != nil {
@@ -353,11 +375,19 @@ func publishBranches(repo *ostree.Repo, entry *QueueEntry) error {
 		}
 
 		// Move from the temporary location to the proper path only if it wasn't previously moved
-		if _, err := os.Stat(objectPath); os.IsNotExist(err) {
+		_, err := os.Lstat(objectPath)
+		if os.IsNotExist(err) {
 			tempPath := GetTempObjectPath(repo, objectName)
-			if err := moveFile(tempPath, objectPath); err != nil {
-				return fmt.Errorf("unable to move \"%s\" to \"%s\": %v", tempPath, objectPath, err)
+			lst, _ := os.Lstat(tempPath)
+			fmt.Println(lst)
+			if lst.Mode()&fs.ModeSymlink != 0 {
+				moveLink(tempPath, objectPath)
+			} else {
+				if err := moveFile(tempPath, objectPath); err != nil {
+					return fmt.Errorf("unable to move \"%s\" to \"%s\": %v", tempPath, objectPath, err)
+				}
 			}
+
 		}
 	}
 

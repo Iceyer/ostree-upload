@@ -11,6 +11,20 @@ import (
 	"os"
 )
 
+func CalculateLinkChecksum(path string) (string, error) {
+	link, err := os.Readlink(path)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+
+	if _, err := h.Write([]byte(link)); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
 // CalculateChecksum calculates the SHA-256 checksum of the file and
 // returns the hex value
 func CalculateChecksum(path string) (string, error) {
